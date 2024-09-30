@@ -1,6 +1,7 @@
 use crate::error::Error::SourceTransformerError;
 use crate::error::ErrorKind::UserDefinedError;
-use crate::shared::{self, prost_timestamp_from_utc};
+use crate::shared::{self, prost_timestamp_from_utc, ContainerType};
+
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::fs;
@@ -334,11 +335,16 @@ impl<T> Server<T> {
     where
         T: SourceTransformer + Send + Sync + 'static,
     {
-        let listener = shared::create_listener_stream(
-            &self.sock_addr,
-            &self.server_info_file,
-            shared::ServerInfo::default(),
-        )?;
+        let mut info = shared::ServerInfo::default();
+        // set the minimum numaflow version for the source transformer container
+        info.set_minimum_numaflow_version(
+            shared::MinimumNumaflowVersion
+                .get(&ContainerType::SourceTransformer)
+                .copied()
+                .unwrap_or_default(),
+        );
+        let listener =
+            shared::create_listener_stream(&self.sock_addr, &self.server_info_file, info)?;
         let handler = self.svc.take().unwrap();
         let (internal_shutdown_tx, internal_shutdown_rx) = mpsc::channel(1);
         let cln_token = CancellationToken::new();
